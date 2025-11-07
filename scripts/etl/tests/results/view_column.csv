@@ -1,0 +1,8 @@
+view_id,column_id,rank,enable_by_default
+1,1,1,true
+1,2,2,true
+1,7,3,true
+1,3,4,false
+1,4,5,false
+1,5,6,false
+1,6,7,false

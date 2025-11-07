@@ -1,0 +1,4 @@
+"id","class","start","stop","measurement","unit","random"
+"ID1","class A",10,20,1000,"mg","rand"
+"id2","class B",100,200,10000,"ml","rand"
+"Id3","class A",1000,2000,100000,"l","rand"

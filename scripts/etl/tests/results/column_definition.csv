@@ -1,0 +1,8 @@
+column_id,fullname,name,label,type,sortable
+1,test-id,id,Id,string,true
+2,test-class,class,Class,string,true
+3,test-start,start,Start,string,true
+4,test-stop,stop,Stop,string,true
+5,test-unit,unit,Unit,string,true
+6,test-random,random,Random,string,true
+7,test-gen_measurement,gen_measurement,Measurement,string,false

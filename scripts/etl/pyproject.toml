@@ -13,3 +13,11 @@ dependencies = [
 yaml = [
     "pyyaml>=6.0.3",
 ]
+
+[dependency-groups]
+
+dev = [
+    "black>=25.9.0",
+    "pandas>=2.3.3",
+    "pytest>=8.4.2",
+]
