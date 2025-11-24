@@ -26,7 +26,8 @@ export default async function(eleventyConfig) {
   eleventyConfig.addWatchTarget('src/assets/css');
 
   eleventyConfig.addPassthroughCopy({
-    'src/assets/images': 'assets/images'
+    'src/assets/images': 'assets/images',
+    'src/assets/docs': 'assets/docs'
   });
   // Copy fonts distributed via npm
   eleventyConfig.addPassthroughCopy({
