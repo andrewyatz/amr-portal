@@ -88,7 +88,7 @@ variables:
 .publish-assets-template:
   <<: *prepare-context
   script:
-    - cd k8s/frontend/
+    - cd k8s/frontend/publish_assets/
     - sed -i "s#<PROJECT_ID>#${CI_PROJECT_ID}#g" publish_assets.yaml
     - sed -i "s#<JOB_ID>#${BUILD_JOB_ID}#g" publish_assets.yaml
     - kustomize edit set namesuffix -- -${CI_PROJECT_ID}-${BUILD_JOB_ID}
