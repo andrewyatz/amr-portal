@@ -17,7 +17,7 @@ spec:
       imagePullSecrets:
         - name: ensemblweb-pull-secret
       containers:
-      - image: dockerhub.ebi.ac.uk/ensembl-web/amr-portal:d9bf511d-fe
+      - image: DOCKER_IMAGE
         imagePullPolicy: Always
         name: amr-portal-nginx
         ports:

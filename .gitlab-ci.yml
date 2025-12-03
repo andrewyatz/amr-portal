@@ -68,6 +68,13 @@ variables:
     - kustomize edit set image DOCKER_IMAGE=${DOCKER_IMAGE}
     - kubectl apply -k .
 
+.deploy-nginx-template:
+  <<: *prepare-context
+  script:
+    - cd k8s/frontend/nginx/
+    - kustomize edit set image DOCKER_IMAGE=${DOCKER_IMAGE}
+    - kubectl apply -k .
+
 # template for deploy the configmap used by the backend backend
 # update docker image in appropriate environment
 .deploy-config-be-template:
@@ -78,7 +85,7 @@ variables:
 
 # template for deploy context for frontend
 # publish static assets to appropriate environment
-.deploy-fe-template:
+.publish-assets-template:
   <<: *prepare-context
   script:
     - cd k8s/frontend/
@@ -158,7 +165,7 @@ Deploy:BE-Config:RC:
 
 # Publish static assets to QA environment
 Publish:Assets:RC:
-  extends: .deploy-fe-template
+  extends: .publish-assets-template
   stage: deploy_rc
   <<: *fe-code-change-rules
   environment:
@@ -230,7 +237,7 @@ Deploy:BE-config:Live:
 # This is manual step it explicitly needs to be triggered by pressing a button in gitlab interface
 # The job is scheduled only for main branch and when deploy freeze is not in place
 Publish:Assets:Live:
-  extends: .deploy-fe-template
+  extends: .publish-assets-template
   stage: deploy
   <<: *fe-code-change-rules
   environment:
@@ -243,3 +250,37 @@ Publish:Assets:Live:
       changes:
         - frontend/**/*
       when: manual
+
+# Deploy Nginx to Live to serve static assets
+# This is manual step it explicitly needs to be triggered by pressing a button in gitlab interface
+# The job is scheduled only for main branch and when deploy freeze is not in place
+Deploy:Nginx:Live:
+  stage: deploy
+  extends: .deploy-nginx-template
+  <<: *static-code-change-rules
+  image: dockerhub.ebi.ac.uk/ensembl-web/deploy-tools:1.0.4
+  environment:
+    name: production
+  variables:
+    AGENT: ${PROD_AGENT}
+    NS: amr
+    DOCKER_IMAGE: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}-fe
+  rules:
+    - if: '$CI_DEPLOY_FREEZE == null && $CI_COMMIT_BRANCH == "nda2"'
+      changes:
+        - frontend/**/*
+      when: manual
+
+# Deploy Nginx to RC to serve static assets
+# The job is scheduled only for main branch
+Deploy:Nginx:RC:
+  stage: deploy_rc
+  extends: .deploy-nginx-template
+  <<: *static-code-change-rules
+  image: dockerhub.ebi.ac.uk/ensembl-web/deploy-tools:1.0.4
+  environment:
+    name: development
+  variables:
+    AGENT: ${REVIEW_AGENT}
+    NS: amr
+    DOCKER_IMAGE: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}-fe
