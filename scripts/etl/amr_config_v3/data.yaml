@@ -30,3 +30,9 @@
     command: CONCAT_WS('|', antibiotic_ontology, antibiotic_ontology_link)
   - name: gen_evidence_accession
     command: CONCAT_WS('|', evidence_accession, evidence_link)
+  - name: gen_annotation_link
+    command: >
+      CONCAT('Annotation','|','https://ftp.ebi.ac.uk/pub/databases/amr_portal/genomes/',
+      IF(STARTS_WITH(assembly_ID, 'ERZ'), CONCAT_WS('/', assembly_ID[0:3], assembly_ID[4:6],
+      assembly_ID[7:9], assembly_ID), CONCAT_WS('/', assembly_ID[0:3], assembly_ID[5:7],
+      assembly_ID[8:10], assembly_ID)))

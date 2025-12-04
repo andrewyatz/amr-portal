@@ -241,7 +241,8 @@
 				{ "name": "subclass", "enabled":true, "rank":26},
       			{ "name": "gen_evidence_accession", "enabled":true, "rank":27},
       			{ "name": "evidence_type", "enabled":true, "rank":28},
-      			{ "name": "evidence_description", "enabled":true, "rank":29}
+      			{ "name": "evidence_description", "enabled":true, "rank":29},
+				{ "name": "gen_annotation_link", "enabled":true, "rank":30}
       		],
       		"other_columns":["pheno_geno_merged"]
 
@@ -369,6 +370,11 @@
             	"label":"Antibiotic ontology",
             	"type":"labelled-link"
             },
+			"gen_annotation_link" : {
+				"label" : "Annotation download",
+				"sortable": 0,
+				"type" : "labelled-link"
+			},
             "measurement_sign": {
             	"hidden": true
             },
