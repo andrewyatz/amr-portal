@@ -192,7 +192,8 @@
       			{ "name": "gen_antibiotic_ontology", "enabled":true, "rank":21},
       			{ "name": "gen_evidence_accession", "enabled":true, "rank":22},
       			{ "name": "evidence_type", "enabled":true, "rank":23},
-      			{ "name": "evidence_description", "enabled":true, "rank":24}
+      			{ "name": "evidence_description", "enabled":true, "rank":24},
+				{ "name": "gen_annotation_link", "enabled":true, "rank":25}
       		],
       		"other_columns":["genotype"]
 		},
@@ -323,6 +324,11 @@
             	"sortable":0,
             	"type":"labelled-link"
             },
+			"gen_annotation_link" : {
+				"label" : "Annotation download",
+				"sortable": 0,
+				"type" : "labelled-link"
+			},
             "evidence_link":{
             	"hidden":true
             },

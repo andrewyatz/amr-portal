@@ -1,6 +1,11 @@
 import sys
 import os
 import json
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
 
 from etl.cli import get_cli_args
 from etl.transform import transform_datasets
@@ -117,9 +122,16 @@ def create_release(release) -> str:
     return release_path
 
 
-def load_json(path):
-    with open(path, "r") as json_in:
-        return json.load(json_in)
+def load_data(path):
+    with open(path, "r") as fh:
+        if path.endswith('.yml') or path.endswith('.yaml'):
+            if yaml is None:
+                raise ImportError("PyYAML is required to load YAML files")
+            return yaml.safe_load(fh)
+        elif path.endswith('.json'):
+            return json.load(fh)
+        else:
+            raise ValueError("Unsupported file format. Use .json or .yml/.yaml")
 
 
 def run_etl():
@@ -127,8 +139,8 @@ def run_etl():
     print("Loading configs")
     cli = get_cli_args().parse_args(sys.argv[1:])
 
-    config = load_json(cli.config)
-    data = load_json(cli.data)
+    config = load_data(cli.config)
+    data = load_data(cli.data)
 
     print("Creating release directory")
     release_path = create_release(cli.release)
