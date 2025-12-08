@@ -1,6 +1,6 @@
 apiVersion: v1
 data:
-  DUCKDB_PATH: /usr/data/amr_alpha_v25.duckdb
+  DUCKDB_PATH: /usr/data/amr_alpha_v26.duckdb
 kind: ConfigMap
 metadata:
   name: amr-api-configmap
