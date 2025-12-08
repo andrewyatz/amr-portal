@@ -266,7 +266,7 @@ Deploy:Nginx:Live:
     NS: amr
     DOCKER_IMAGE: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}-fe
   rules:
-    - if: '$CI_DEPLOY_FREEZE == null && $CI_COMMIT_BRANCH == "nda2"'
+    - if: '$CI_DEPLOY_FREEZE == null && $CI_COMMIT_BRANCH == "main"'
       changes:
         - frontend/**/*
       when: manual
