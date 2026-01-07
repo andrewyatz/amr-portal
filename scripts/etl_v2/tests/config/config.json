@@ -1,0 +1,51 @@
+{
+	"filterCategories":[
+		{
+			"dataset":"test",
+			"id":"id",
+			"label":"ID",
+			"filter_label":"lower(id)"
+		},
+        {
+			"dataset":"test",
+			"id":"class",
+			"label":"Class",
+			"filter_label":"class"
+		}
+    ],
+    "views":[
+        {
+			"name":"Test data set",
+			"dataset":"test",
+			"categoryGroups": [ { "name": "ID", "categories": ["id"] } ],
+      		"otherCategoryGroups": [
+      			{ "name": "class", "categories": ["class"] }
+      		],
+      		"columns":[
+      			{ "name": "id", "enabled":true, "rank":1},
+      			{ "name": "class", "enabled":true, "rank":2},
+                { "name": "gen_measurement", "enabled":true, "rank":3}
+            ],
+      		"other_columns":["test"]
+        }
+    ],
+	"special_columns":{
+        "test":{
+            "ID":{
+            	"sortable":0,
+                "type":"link",
+                "url":"https://www.domain.com/ID/{}"
+            },
+            "gen_measurement": {
+            	"label":"Measurement",
+            	"sortable":0
+            },
+            "measurement": {
+            	"hidden": true
+            },
+            "measurement_units": {
+            	"hidden": true
+            }
+        }
+    }
+}
