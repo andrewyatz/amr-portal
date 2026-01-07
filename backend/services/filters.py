@@ -18,8 +18,11 @@ from backend.models.payload import Payload
 from backend.services.serializer import serialize_amr_record
 from backend.core.filters_config_parser import build_filters_config
 from backend.core.config import get_settings
+from backend.core.utils import parse_location, bins_for_range_extended
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 _settings = get_settings()
 
@@ -30,6 +33,7 @@ _display_columns_cache: Dict[int, Any] = {}
 @dataclass
 class FilterQueryContext:
     """Container for all SQL/query metadata needed to stream AMR records."""
+
     dataset: str
     base_query: str
     count_query: str
@@ -53,9 +57,12 @@ def get_table_columns(table_name: str, db: duckdb.DuckDBPyConnection):
     """
     try:
         columns_result = db.query(f"PRAGMA table_info({table_name})").fetchdf()
-        return set(columns_result['name'].tolist())
+        return set(columns_result["name"].tolist())
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to get columns for table: {table_name}")
+        raise HTTPException(
+            status_code=400, detail=f"Failed to get columns for table: {table_name}"
+        )
+
 
 def check_selected_filters(grouped_filters, valid_columns):
     """Verify that all requested filter columns exist within the dataset schema.
@@ -70,6 +77,7 @@ def check_selected_filters(grouped_filters, valid_columns):
     if set(grouped_filters).issubset(valid_columns):
         return True
     return False
+
 
 def get_dataset_from_view(view_id: int, db: duckdb.DuckDBPyConnection):
     """Resolve the dataset backing a view_id.
@@ -89,7 +97,10 @@ def get_dataset_from_view(view_id: int, db: duckdb.DuckDBPyConnection):
         dataset = db.execute(dataset_from_view_query).fetchone()[0]
         return dataset
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to get dataset from view ID: {view_id}")
+        raise HTTPException(
+            status_code=400, detail=f"Failed to get dataset from view ID: {view_id}"
+        )
+
 
 def get_display_column_details(view_id: int, db: duckdb.DuckDBPyConnection):
     """Return per-column metadata for a view, caching results for reuse.
@@ -121,18 +132,23 @@ def get_display_column_details(view_id: int, db: duckdb.DuckDBPyConnection):
         _display_columns_cache[view_id] = columns
         return columns.copy()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to get columns to display from view ID: {view_id}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to get columns to display from view ID: {view_id}",
+        )
 
-def quote_column_name(column_name):
-    """Quote a column name for DuckDB SQL usage.
+
+def quote_name(item_name: str) -> str:
+    """Quote a name for DuckDB SQL usage.
 
     Args:
-        column_name (str): Unquoted identifier.
+        item_name (str): Unquoted identifier.
 
     Returns:
         str: Identifier quoted with double quotes.
     """
-    return f'"{column_name}"'
+    return f'"{item_name}"'
+
 
 def fetch_filters(db):
     """Load the filters configuration used by the UI.
@@ -163,7 +179,9 @@ def _normalize_value(value):
     return value
 
 
-def _append_order_clause(query: str, payload: Payload, order_by_col: Optional[str]) -> str:
+def _append_order_clause(
+    query: str, payload: Payload, order_by_col: Optional[str]
+) -> str:
     """Add an ORDER BY clause if the payload specifies a sortable column.
 
     Args:
@@ -175,11 +193,13 @@ def _append_order_clause(query: str, payload: Payload, order_by_col: Optional[st
         str: Query with ORDER BY appended when required.
     """
     if payload.order_by and order_by_col:
-        return f"{query} ORDER BY {quote_column_name(order_by_col)} {payload.order_by.order}"
+        return f"{query} ORDER BY {quote_name(order_by_col)} {payload.order_by.order}"
     return query
 
 
-def _build_filter_query_context(payload: Payload, db: duckdb.DuckDBPyConnection) -> FilterQueryContext:
+def _build_filter_query_context(
+    payload: Payload, db: duckdb.DuckDBPyConnection
+) -> FilterQueryContext:
     """Pre-compute shared SQL fragments/metadata for both paged and streaming exports.
 
     Args:
@@ -196,8 +216,7 @@ def _build_filter_query_context(payload: Payload, db: duckdb.DuckDBPyConnection)
     # Check if the view_id is specified
     if not selected_view_id:
         raise HTTPException(
-            status_code=400,
-            detail="Please specify a view ID to filter by."
+            status_code=400, detail="Please specify a view ID to filter by."
         )
 
     # Now we use the selected view to infer which dataset to query data from
@@ -210,20 +229,29 @@ def _build_filter_query_context(payload: Payload, db: duckdb.DuckDBPyConnection)
 
     # This will be used below in the SQL query to select only columns we are interested in
     # Properly quote column names for SQL query
-    quoted_columns = [quote_column_name(col) for col in columns_to_display["name"]]
+    quoted_columns = [quote_name(col) for col in columns_to_display["name"]]
     columns_to_display_str = ", ".join(quoted_columns)
-    
+
     # Build dict of column details for serializer
-    columns_to_display_dict = columns_to_display.to_dict('records')
+    columns_to_display_dict = columns_to_display.to_dict("records")
     display_column_details = {r["fullname"]: r for r in columns_to_display_dict}
 
     # group them together and trim the first dataset name part
-    grouped_filters = defaultdict(list)
-    for f in payload.selected_filters:
-        trimmed_filter_category = f.category.split("-")[-1]
-        grouped_filters[trimmed_filter_category].append(f.value)
+    grouped_filters = {}
 
-    are_filters_valid = check_selected_filters(grouped_filters, valid_columns)
+    for f in payload.selected_filters:
+        if f.filter_type not in grouped_filters:
+            grouped_filters[f.filter_type] = defaultdict(list)
+        grouped_filters[f.filter_type][f.trimmed_category()].append(f.value)
+
+    are_filters_valid = True
+    for k, v in grouped_filters.items():
+        # TODO skip this check for the location column since it is bogus. Datasets should have
+        # a location column which is the combined values
+        if k == "location":
+            continue
+        logger.info(f"Checking filters of type: {k}")
+        are_filters_valid = check_selected_filters(grouped_filters[k], valid_columns)
     logger.info(f"are_filters_valid: {are_filters_valid}")
     logger.info(f"selected_view_id: {selected_view_id}")
     logger.info(f"selected_dataset: {selected_dataset}")
@@ -233,25 +261,55 @@ def _build_filter_query_context(payload: Payload, db: duckdb.DuckDBPyConnection)
     if not are_filters_valid:
         raise HTTPException(
             status_code=400,
-            detail="Something is wrong with the filters, double check the category values."
+            detail="Something is wrong with the filters, double check the category values.",
         )
 
     order_by_col = None
     if payload.order_by:
-        order_by_col = payload.order_by.category.split("-")[-1]
+        order_by_col = payload.order_by.trimmed_category()
         if order_by_col not in valid_columns:
-            raise HTTPException(status_code=400, detail=f"Invalid order_by column: {order_by_col!r}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid order_by column: {order_by_col!r}"
+            )
 
     where_clauses = []
-    for category, values in grouped_filters.items():
-        # Convert list to SQL tuple syntax: ('value1', 'value2')
-        quoted_values = [f"'{v}'" for v in values]
-        tuple_clause = f"({', '.join(quoted_values)})"
-        where_clauses.append(f"{category} IN {tuple_clause}")
+    for filter_type, filters in grouped_filters.items():
+        if filter_type == "in":
+            # Convert list to SQL tuple syntax: ('value1', 'value2')
+            for category, values in filters.items():
+                quoted_values = [f"'{v}'" for v in values]
+                tuple_clause = f"({', '.join(quoted_values)})"
+                where_clauses.append(f"{category} IN {tuple_clause}")
+        elif filter_type == "exact":
+            for category, values in filters.items():
+                for value in values:
+                    where_clauses.append(f"{category} = '{value}'")
+        elif filter_type == "like":
+            for category, values in filters.items():
+                for value in values:
+                    where_clauses.append(f"{category} LIKE '{value}%'")
+        elif filter_type == "location":
+            for category, values in filters.items():
+                for value in values:
+                    try:
+                        start, end, strand = parse_location(value)
+                    except ValueError:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Invalid location filter value: {value!r}",
+                        )
+                    bins = bins_for_range_extended((start - 1), end)
+                    where_clauses.append(
+                        f"{quote_name("region_start")} <= {end} AND {quote_name("region_end")} >= {start} AND {quote_name("_bin")} IN ({",".join(str(b) for b in bins)}) {f"AND {quote_name("strand")} ='{strand}'" if strand else ''}"
+                    )
+        elif filter_type == "list_contains":
+            for category, values in filters.items():
+                for value in values:
+                    where_clauses.append(f"LIST_CONTAINS({category}, '{value}')")
 
     where_sql = " AND ".join(where_clauses)
-    base_query = f"SELECT {columns_to_display_str} FROM {selected_dataset}"
-    count_query = f"SELECT COUNT(*) AS count FROM {selected_dataset}"
+    base_query = f"SELECT {columns_to_display_str} FROM {quote_name(selected_dataset)}"
+    count_query = f"SELECT COUNT(*) AS count FROM {quote_name(selected_dataset)}"
     if where_sql:
         base_query += f" WHERE {where_sql}"
         count_query += f" WHERE {where_sql}"
@@ -327,14 +385,19 @@ def filter_amr_records(payload: Payload, db: duckdb.DuckDBPyConnection):
         total_hits = db.execute(context.count_query).fetchone()[0]
 
         offset = (page - 1) * per_page
-        paginated_query = _append_order_clause(context.base_query, payload, context.order_by_col)
+        paginated_query = _append_order_clause(
+            context.base_query, payload, context.order_by_col
+        )
         paginated_query += f" LIMIT {per_page} OFFSET {offset}"
         logger.info(f"base_query: {paginated_query}")
 
         res_df = db.execute(paginated_query).fetchdf()
         res_df = res_df.replace({np.nan: None, np.inf: None, -np.inf: None})
         res_df = res_df.add_prefix(f"{context.dataset}-")
-        result = [serialize_amr_record(row, context.display_column_details) for _, row in res_df.iterrows()]
+        result = [
+            serialize_amr_record(row, context.display_column_details)
+            for _, row in res_df.iterrows()
+        ]
 
         return {
             "meta": {
@@ -342,12 +405,16 @@ def filter_amr_records(payload: Payload, db: duckdb.DuckDBPyConnection):
                 "page": page,
                 "per_page": per_page,
             },
-            "data": result
+            "data": result,
         }
 
     except Exception as e:
         logger.error(f"Database query failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Database query failed, see the logs for more details")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database query failed, see the logs for more details",
+        )
+
 
 def flatten_record(record):
     """Convert list-of-dicts into {column_id: value}.
@@ -419,7 +486,9 @@ def stream_json_rows(rows: Iterable[Dict[str, Any]]):
     yield b"]"
 
 
-def fetch_filtered_records(payload: Payload, scope, file_format, db: duckdb.DuckDBPyConnection):
+def fetch_filtered_records(
+    payload: Payload, scope, file_format, db: duckdb.DuckDBPyConnection
+):
     """Download filtered AMR records in CSV or JSON format.
 
     Args:
@@ -441,7 +510,9 @@ def fetch_filtered_records(payload: Payload, scope, file_format, db: duckdb.Duck
     if scope == "page":
         data = filter_amr_records(payload, db)["data"]
         if not data:
-            raise HTTPException(status_code=404, detail="No data found for the given filters")
+            raise HTTPException(
+                status_code=404, detail="No data found for the given filters"
+            )
 
         flat_results = [flatten_record(r) for r in data]
         if file_format == "json":
@@ -450,20 +521,24 @@ def fetch_filtered_records(payload: Payload, scope, file_format, db: duckdb.Duck
             return StreamingResponse(
                 file_like,
                 media_type="application/json",
-                headers={"Content-Disposition": "attachment; filename=amr_records.json"}
+                headers={
+                    "Content-Disposition": "attachment; filename=amr_records.json"
+                },
             )
 
         return StreamingResponse(
             stream_csv(flat_results),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=amr_records.csv"}
+            headers={"Content-Disposition": "attachment; filename=amr_records.csv"},
         )
 
     # scope == "all" - true streaming without loading the full dataset
     context = _build_filter_query_context(payload, db)
     total_hits = db.execute(context.count_query).fetchone()[0]
     if total_hits == 0:
-        raise HTTPException(status_code=404, detail="No data found for the given filters")
+        raise HTTPException(
+            status_code=404, detail="No data found for the given filters"
+        )
 
     # Stream rows straight from DuckDB so responses for 100k+ rows start immediately.
     row_iter = _stream_prefixed_rows(context, payload)
@@ -471,11 +546,11 @@ def fetch_filtered_records(payload: Payload, scope, file_format, db: duckdb.Duck
         return StreamingResponse(
             stream_json_rows(row_iter),
             media_type="application/json",
-            headers={"Content-Disposition": "attachment; filename=amr_records.json"}
+            headers={"Content-Disposition": "attachment; filename=amr_records.json"},
         )
 
     return StreamingResponse(
         stream_csv(row_iter),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=amr_records.csv"}
+        headers={"Content-Disposition": "attachment; filename=amr_records.csv"},
     )

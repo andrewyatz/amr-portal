@@ -1,0 +1,51 @@
+{
+  "title": "ETL Datasets config",
+  "type": "array",
+  "description":"Describes an array of datasets",
+  "minItems": 1,
+  "items": {
+    "type": "object",
+    "required": [
+      "name",
+      "path"
+    ],
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "dataset name"
+      },
+      "path": {
+        "type": "string",
+        "description": "dataset path"
+      },
+      "filter": {
+        "type": "string",
+        "description":"Path of list to values used to filter dataset by"
+      },
+      "filter_column": {
+        "type": "string",
+        "description": "name of column to filter by"
+      },
+      "create_columns": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "name",
+            "command"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Column name"
+            },
+            "command": {
+              "type": "string",
+              "description": "SQL used to generate column data"
+            }
+          }
+        }
+      }
+    }
+  }
+}
