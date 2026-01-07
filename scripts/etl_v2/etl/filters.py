@@ -7,13 +7,13 @@ logger = logging.getLogger(__name__)
 
 
 class Filters:
-    """Creates the filters available by querying distinct values from each dataset and 
+    """Creates the filters available by querying distinct values from each dataset and
     parquet file. Saves to JSON files in the release_path.
-    
+
     Filters are based on the filterCategories defined in the config file. We also apply
     the filter_label text in the SQL select to get the label for each filter value. You can
     configure this to be different from the ID if needed e.g. lowercasing, trimming, adding prefixes etc.
-    
+
     Attributes:
         - datasets: list[dict] of datasets to process
         - filter_categories: dict[str,dict] of filter categories to create

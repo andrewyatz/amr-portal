@@ -17,6 +17,7 @@
         {
 			"name":"Test data set",
 			"dataset":"test",
+			"url_name":"test",
 			"categoryGroups": [ { "name": "ID", "categories": ["id"] } ],
       		"otherCategoryGroups": [
       			{ "name": "class", "categories": ["class"] }

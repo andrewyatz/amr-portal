@@ -6,6 +6,10 @@ from etl.main import run_etl
 import duckdb
 import pandas as pd
 from pandas.testing import assert_frame_equal
+import logging
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 
 @pytest.fixture
@@ -15,7 +19,7 @@ def data_dir():
 
 @pytest.fixture
 def results_dir():
-    return Path(__file__).resolve().parent / "data"
+    return Path(__file__).resolve().parent / "results"
 
 
 @pytest.fixture
@@ -59,9 +63,9 @@ def test_run_etl(monkeypatch, tmp_path, config_dir, data_dir, schema_dir, result
     )
     monkeypatch.chdir(tmp_path)
     run_etl()
-    print(tmp_path)
+    log.info(tmp_path)
 
-    duckdb_path = tmp_path / release / "amr_test_v1.duckdb"
+    duckdb_path = tmp_path / release / f"{release}.duckdb"
     assert duckdb_path.exists()
     assert duckdb_path.is_file()
 
@@ -81,18 +85,20 @@ def test_run_etl(monkeypatch, tmp_path, config_dir, data_dir, schema_dir, result
         "dataset",
         "dataset_column",
         "filter",
-        "release",
         "view",
         "view_categories",
-        "view_categories_json",
         "view_column",
     ]
-    _assert_table(
-        results_dir, con, "test", numeric_cols=["start", "stop", "measurement"]
-    )
+    for table in remaining_tables:
+        _assert_table(results_dir, con, table)
+    # Assert the release table alone since it has different data that changes on date
+    expected = pd.DataFrame({"release_label": [pd.Timestamp.now().strftime("%Y-%m")]})
+    actual = con.execute("SELECT release_label FROM release").fetchdf()
+    assert_frame_equal(actual, expected, check_dtype=False)
 
 
 def _assert_table(results_dir, con, table_name, numeric_cols=[]):
+    print(f"Asserting table: {table_name}")
     expected = pd.read_csv(results_dir / f"{table_name}.csv")
     actual = con.execute(
         f"select {",".join(expected.columns)} from {table_name}"

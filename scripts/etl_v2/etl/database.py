@@ -162,6 +162,7 @@ class DatabaseConfig(BaseDatabase):
                 sql = "INSERT INTO filter (column_id, value, label) VALUES (?,?,?)"
                 params = (column.db_id, f.value, f.label)
                 conn.execute(sql, params)
+            self.filter_lookup[filter.fullname] = filter
 
     def process_view(self, v: ViewModel):
         conn = self.conn
@@ -220,11 +221,12 @@ class DatabaseConfig(BaseDatabase):
                 column = self.column_lookup.get(fullname)
                 category_id = self.next_id("category")
                 logging.debug(f"Inserting category {fullname} with ID {category_id}")
+                filter = self.filter_lookup.get(fullname)
                 params = (
                     category_id,
                     dataset.db_id,
                     column.db_id,
-                    category_group.name,
+                    (filter.title if filter else category.name),
                     fullname,
                 )
                 conn.execute(sql, params)
@@ -246,6 +248,7 @@ class DatabaseConfig(BaseDatabase):
         self.schema_version = schema_version
         self.dataset_lookup = {}
         self.column_lookup = {}
+        self.filter_lookup = {}
         self.ids = {}
 
     def load_schema(self):
