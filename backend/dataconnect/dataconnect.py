@@ -72,7 +72,7 @@ def get_table_info(
     table_name: str, db: duckdb.DuckDBPyConnection = Depends(get_db_connection)
 ):
     _verify_table_exists(db, table_name)
-    query = f"SELECT * from {table_name} LIMIT 1"
+    query = f"SELECT * from '{table_name}' LIMIT 1"
     rel = db.sql(query)
     schema = _executed_query_to_json_schema(rel)
     data_model = {
@@ -94,13 +94,13 @@ def get_table_data(
     _verify_table_exists(db, table_name)
     offset = page * page_size
     total_count = db.execute(
-        f"SELECT COUNT(*) FROM {table_name}"
+        f"SELECT COUNT(*) FROM '{table_name}'"
     ).fetchone()[0]
     
     if offset >= total_count:
         raise HTTPException(status_code=404, detail="Page out of range")
     
-    sql = f"SELECT * FROM {table_name} LIMIT ? OFFSET ?"
+    sql = f"SELECT * FROM '{table_name}' LIMIT ? OFFSET ?"
     response = query_table(DataConnectQuery(query=sql, parameters=[page_size, offset]), db)
     next_page = request.url.include_query_params(page=page + 1, page_size=page_size)
     response["pagination"] = {
