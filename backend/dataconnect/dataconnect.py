@@ -71,6 +71,7 @@ def list_tables(db: duckdb.DuckDBPyConnection = Depends(get_db_connection)):
 def get_table_info(
     table_name: str, db: duckdb.DuckDBPyConnection = Depends(get_db_connection)
 ):
+    _verify_table_exists(db, table_name)
     query = f"SELECT * from {table_name} LIMIT 1"
     rel = db.sql(query)
     schema = _executed_query_to_json_schema(rel)
@@ -90,10 +91,8 @@ def get_table_data(
     page_size: int = 100,
     page: int = 0,
 ):
+    _verify_table_exists(db, table_name)
     offset = page * page_size
-    
-    print(offset, page_size, page)
-    
     total_count = db.execute(
         f"SELECT COUNT(*) FROM {table_name}"
     ).fetchone()[0]
@@ -173,19 +172,17 @@ def query_table(
         raise HTTPException(status_code=400, detail=f"Query execution error: {e}")
 
 
-def _name_to_view_id(db: duckdb.DuckDBPyConnection, name: str) -> int:
-    filters = fetch_filters(db)
-    for view in filters["filterViews"]:
-        if view["url_name"] == name:
-            return int(view["id"])
-    raise HTTPException(
-        status_code=404,
-        detail=f"Table '{name}' not found. Cannot map to internal view ID.",
-    )
-
-
 def _view_id_to_dataset_name(db: duckdb.DuckDBPyConnection, view_id: int) -> str:
     return get_dataset_from_view(db=db, view_id=view_id)
+
+
+def _verify_table_exists(db: duckdb.DuckDBPyConnection, table_name: str) -> str:
+    check_table = f"SELECT distinct(dataset_name) FROM view_categories WHERE dataset_name =?"
+    try:
+        dataset = db.execute(check_table, (table_name,)).fetchone()[0]
+        return dataset
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to find the specified table: {table_name}")
 
 
 def _executed_query_to_json_schema(result: duckdb.DuckDBPyRelation):
