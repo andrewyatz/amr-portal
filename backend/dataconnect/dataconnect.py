@@ -1,6 +1,6 @@
 import duckdb
 import re
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 
 import sqlglot
 import sqlglot.expressions as exp
@@ -81,6 +81,34 @@ def get_table_info(
     }
     info = {"name": table_name, "data_model": data_model}
     return info
+
+@router.get("/table/{table_name}/data")
+def get_table_data(
+    request: Request,
+    table_name: str,
+    db: duckdb.DuckDBPyConnection = Depends(get_db_connection),
+    page_size: int = 100,
+    page: int = 0,
+):
+    offset = page * page_size
+    
+    print(offset, page_size, page)
+    
+    total_count = db.execute(
+        f"SELECT COUNT(*) FROM {table_name}"
+    ).fetchone()[0]
+    
+    if offset >= total_count:
+        raise HTTPException(status_code=404, detail="Page out of range")
+    
+    sql = f"SELECT * FROM {table_name} LIMIT ? OFFSET ?"
+    response = query_table(DataConnectQuery(query=sql, parameters=[page_size, offset]), db)
+    next_page = request.url.include_query_params(page=page + 1, page_size=page_size)
+    response["pagination"] = {
+        "next_page_url": str(next_page)
+    }
+    return response
+
 
 @router.post("/query")
 def query_table(
