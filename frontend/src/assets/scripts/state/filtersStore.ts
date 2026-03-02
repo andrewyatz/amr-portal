@@ -1,6 +1,6 @@
 import { Signal } from 'signal-polyfill';
 
-import type { FiltersConfig, FiltersView, FilterCategoryGroup, AMRTableColumn } from '../types/filters/filtersConfig';
+import type { FiltersConfig, FiltersView, FilterGroup, AMRTableColumn } from '../types/filters/filtersConfig';
 
 export type SelectedFilter = {
   category: string;
@@ -80,20 +80,20 @@ const clearAllFilters = () => {
 const filterGroupsForViewMode = new Signal.Computed(() => {
   const filtersView = currentViewConfig.get() as FiltersView;
 
-  return filtersView.categoryGroups;
+  return filtersView.filterGroups;
 });
 
 
 const activeFilterGroups = new Signal.State<Record<string, string | null>>({});
-const activeFilterGroup = new Signal.Computed<FilterCategoryGroup>(() => {
+const activeFilterGroup = new Signal.Computed<FilterGroup>(() => {
   const currentFiltersView = currentViewConfig.get() as FiltersView;
   const currentActiveFilterGroupIds: Record<string, string | null> = activeFilterGroups.get();
   const currentActiveFilterGroupId = currentActiveFilterGroupIds[currentFiltersView.id];
 
   if (currentActiveFilterGroupId) {
-    return currentFiltersView.categoryGroups.find(group => group.name === currentActiveFilterGroupId) as FilterCategoryGroup;
+    return currentFiltersView.filterGroups.find(group => group.id === currentActiveFilterGroupId) as FilterGroup;
   } else {
-    return currentFiltersView.categoryGroups[0];
+    return currentFiltersView.filterGroups[0];
   }
 });
 const setActiveFilterGroup = (filterGroupId: string | null) => {
@@ -122,8 +122,7 @@ const appliedFiltersCount = new Signal.Computed<number>(() => {
     return 0;
   }
 
-  viewConfig.categoryGroups;
-  const primaryFilterCategoryIds = viewConfig.categoryGroups.reduce((ids, group) => {
+  const primaryFilterCategoryIds = viewConfig.filterGroups.reduce((ids, group) => {
     return ids.concat(...group.categories)
   }, [] as string[]);
 

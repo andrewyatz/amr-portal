@@ -1,13 +1,5 @@
 import type { BackendInterface, AMRRecordsFetchParams, AMRRecordsResponse } from './backendInterface';
-import type { FiltersConfig, FiltersView } from '../types/filters/filtersConfig';
-
-type OldFiltersView = FiltersView & {
-  otherCategoryGroups: FiltersView['categoryGroups'];
-};
-
-type OldFiltersConfig = Omit<FiltersConfig, 'filterViews'> & {
-  filterViews: OldFiltersView[];
-};
+import type { FiltersConfig } from '../types/filters/filtersConfig';
 
 export class ApiBackend implements BackendInterface {
   apiUrl: string;
@@ -29,17 +21,7 @@ export class ApiBackend implements BackendInterface {
       throw new Error(`Failed to fetch filters config: ${response.statusText}`);
     }
 
-    // NOTE: There no longer seems to be any distinction between the main filters category,
-    // and all other filter categories.
-    // Merging them here, on the client; but we should update this on the server
-
-    const config: OldFiltersConfig = await response.json();
-    config.filterViews = config.filterViews.map(view => ({
-      ...view,
-      categoryGroups: [...view.categoryGroups, ...view.otherCategoryGroups]
-    }));
-
-
+    const config: FiltersConfig = await response.json();
     return config;
   };
 

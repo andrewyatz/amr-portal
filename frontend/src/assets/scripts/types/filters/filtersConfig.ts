@@ -1,18 +1,26 @@
 export type Filter = {
   label: string;
-  value: string; // ??? how do we represent null values?
+  value: string;
 };
 
 export type FilterCategory = {
   id: string;
   label: string;
+  filter_type: string;
+  match_type?: string | null;
+  min?: number | null;
+  max?: number | null;
+  query_columns?: Record<string, string> | null;
+  regex?: string | null;
   filters: Filter[];
 };
 
 export type FilterCategoriesMap = Record<string, FilterCategory>;
 
-export type FilterCategoryGroup = {
-  name: string;
+export type FilterGroup = {
+  id: string;
+  label: string;
+  rank: number;
   categories: string[]; // an array of filter category ids
 };
 
@@ -26,13 +34,14 @@ export type AMRTableColumn = {
   sortable: boolean;
   rank: number; // <-- describes the order of the columns
   enable_by_default: boolean;
+  hidden?: boolean;
 };
 
 export type FiltersView = {
   id: number | string;
   name: string;
   url_name: string; // the url identifier of the view
-  categoryGroups: FilterCategoryGroup[]; // order in the array will be used for display order
+  filterGroups: FilterGroup[]; // ordered by rank
   columns: AMRTableColumn[];
 };
 

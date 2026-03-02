@@ -47,15 +47,15 @@ export class FiltersAreaTop extends SignalWatcher(LitElement) {
       </span>
       <div class="filter-groups-nav">
         ${filterGroups.map(group => {
-          const isActiveGroup = group.name === activeFilterGroup.name;
+          const isActiveGroup = group.id === activeFilterGroup.id;
 
           return html`
             <ens-text-button
               class=${isActiveGroup ? 'active' : nothing}
-              @click=${() => this.#onFiltersGroupSelect(group.name)}
+              @click=${() => this.#onFiltersGroupSelect(group.id)}
               ?disabled=${isActiveGroup}
             >
-              ${group.name}
+              ${group.label}
             </ens-text-button>
          `
         })}
