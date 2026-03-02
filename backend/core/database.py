@@ -11,6 +11,12 @@ def get_db_connection():
     conn = duckdb.connect(settings.duckdb_path, read_only=True)
     conn.execute("PRAGMA threads = 4")
     conn.execute("PRAGMA memory_limit = '2GB'")
+    if settings.enable_dataconnect:
+        conn.execute("SET enable_external_access = false")
+        conn.execute("SET autoload_known_extensions = false")
+        conn.execute("SET autoinstall_known_extensions = false")
+        conn.execute("SET allow_community_extensions = false")
+    conn.execute("SET lock_configuration = true")
     try:
         yield conn
     finally:

@@ -3,7 +3,7 @@ import re
 import duckdb
 import sqlglot
 import sqlglot.expressions as exp
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from backend.core.database import get_db_connection
 from backend.models.dataconnect import DataConnectQuery
@@ -95,8 +95,8 @@ def get_table_data(
     request: Request,
     table_name: str,
     db: duckdb.DuckDBPyConnection = Depends(get_db_connection),
-    page_size: int = 100,
-    page: int = 0,
+    page_size: int = Query(default=100, ge=1, le=10000),
+    page: int = Query(default=0, ge=0),
 ):
     _verify_table_exists(db, table_name)
     offset = page * page_size
