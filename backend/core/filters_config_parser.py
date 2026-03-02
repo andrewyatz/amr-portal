@@ -142,7 +142,7 @@ def _build_filter_views(db, rows: Iterable[dict[str, Any]]) -> list[dict[str, An
             }
 
         group_id = r["group_id"]
-        groups = per_view_groups[vid]
+        groups = per_view_group_index[vid]
 
         if group_id not in groups:
             groups[group_id] = {
@@ -163,7 +163,7 @@ def _build_filter_views(db, rows: Iterable[dict[str, Any]]) -> list[dict[str, An
             group["categories"].append(prefixed_filter_id)
 
     # Attach sorted groups to views
-    for vid, groups in per_view_groups.items():
+    for vid, groups in per_view_group_index.items():
         sorted_groups = sorted(groups.values(), key=lambda g: g["rank"])
         views[vid]["filterGroups"] = sorted_groups
 
