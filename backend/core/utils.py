@@ -1,4 +1,13 @@
+import math
 from typing import Any
+
+
+def _sanitise_nan(value: Any) -> Any:
+    """Convert NaN float values to None for JSON compatibility."""
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    return value
+
 
 def query_to_records(db, sql: str) -> list[dict[str, Any]]:
     """Run a SQL query and return a list of dict records.
@@ -10,4 +19,8 @@ def query_to_records(db, sql: str) -> list[dict[str, Any]]:
     Returns:
         List[Dict[str, Any]]: Each row represented as a dictionary.
     """
-    return db.query(sql).fetchdf().to_dict(orient="records")
+    records = db.query(sql).fetchdf().to_dict(orient="records")
+    return [
+        {k: _sanitise_nan(v) for k, v in row.items()}
+        for row in records
+    ]

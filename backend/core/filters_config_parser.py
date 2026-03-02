@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Iterable
 from collections import defaultdict, OrderedDict
 
@@ -7,98 +8,98 @@ import duckdb
 from backend.core.utils import query_to_records
 
 
+def _resolve_column_name(filter_name: str, query_columns: Any) -> str:
+    """Resolve the actual data column name from query_columns or filter_name.
+
+    If query_columns specifies a 'column' key, use that; otherwise
+    fall back to filter_name as the column name.
+    """
+    if query_columns and isinstance(query_columns, dict) and "column" in query_columns:
+        return query_columns["column"]
+    return filter_name
+
+
 def _build_filter_categories(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Transform raw `filter` table rows into the `filterCategories` structure.
+    """Transform filter_config + view_filter_value rows into the filterCategories structure.
+
+    Each filter is keyed by its prefixed id (source-column_name) to maintain
+    the frontend's expected column identity format. The column name is resolved
+    from query_columns when filter IDs differ from column names.
 
     Args:
-        rows: Iterable of dict rows from the `filters` table.
+        rows: Iterable of dict rows from the filter query.
 
     Returns:
-        Dict[str, Dict[str, Any]]: Mapping of category-id -> category payload with its filters.
+        Dict keyed by prefixed column id -> category payload with filters and type info.
     """
     categories: dict[str, dict[str, Any]] = OrderedDict()
 
     for r in rows:
-        cat_id = r["column_id"]
+        source = r["source"]
+        filter_name = r["filter_name"]
+
+        query_columns = r.get("query_columns")
+        if query_columns and isinstance(query_columns, str):
+            query_columns = json.loads(query_columns)
+
+        # Use the actual column name for the category ID prefix (frontend compatibility)
+        col_name = _resolve_column_name(filter_name, query_columns)
+        cat_id = f"{source}-{col_name}"
+
         if cat_id not in categories:
             categories[cat_id] = {
-                "id": r["column_id"],
-                "label": r["label"],
-                "dataset": r["dataset"],
+                "id": cat_id,
+                "label": r["filter_label"],
+                "dataset": source,
+                "filter_type": r["filter_type"],
+                "match_type": r.get("match_type"),
+                "min": r.get("min"),
+                "max": r.get("max"),
+                "query_columns": query_columns,
+                "regex": r.get("regex"),
                 "filters": [],
             }
-        categories[cat_id]["filters"].append(
-            {
-                "label": r["label"],
-                "value": r["value"],
-            }
-        )
+
+        # Only add filter values for select_list type
+        if r.get("filter_value") is not None:
+            categories[cat_id]["filters"].append(
+                {
+                    "label": r["value_label"],
+                    "value": r["filter_value"],
+                }
+            )
 
     return categories
-
-
-def _ensure_group(
-    view: dict[str, Any],
-    group_name: str,
-    is_primary: bool,
-    group_index: dict[tuple[str, bool], int],
-) -> dict[str, Any]:
-    """Ensure a category group exists on a view and return it.
-
-    Args:
-        view: The view dict with 'categoryGroups' and 'otherCategoryGroups'.
-        group_name: Name of the category group.
-        is_primary: Whether the group belongs to 'categoryGroups' (True) or 'otherCategoryGroups' (False).
-        group_index: Internal index mapping (group_name, is_primary) -> index in the target list.
-
-    Returns:
-        Dict[str, Any]: The category group dictionary (with a 'categories' list).
-    """
-    key = (group_name, is_primary)
-    target_key = "categoryGroups" if is_primary else "otherCategoryGroups"
-
-    if key in group_index:
-        return view[target_key][group_index[key]]
-
-    group = {"name": group_name, "categories": []}
-    view[target_key].append(group)
-    group_index[key] = len(view[target_key]) - 1
-    return group
 
 
 def _build_columns_per_view(db):
     """Builds a dictionary mapping view names to their column configurations.
 
-    Queries the database to retrieve column configurations for all views, including
-    column metadata such as labels, sortability, ranking, and default visibility.
-    The results are grouped by view name for easy access.
+    Queries view_column directly (new schema has all metadata inline,
+    no join to column_definition needed). Adds source prefix to column
+    name for frontend compatibility.
 
     Args:
-        db: Database connection object used to execute the query.
+        db: Database connection object.
 
     Returns:
         A dictionary where keys are view names and values are lists of column
-        configuration dictionaries. Each column dictionary contains:
-            - view_name: The view name teh column belongs to
-            - id: The column identifier
-            - label: The display label for the column
-            - sortable: Boolean indicating if the column is sortable
-            - rank: The display order/ranking of the column
-            - enable_by_default: Boolean indicating if column is enabled by default (for visibility)
-
-    Example:
-        >>> result = _build_columns_per_view(db)
-        >>> result['AMR antibiotics']
-        [{'view_name': 'AMR antibiotics', 'id': 'phenotype-Antibiotic_name, 'label': 'Antibiotic Name', 'sortable': True, 'rank': 1, 'enable_by_default': True},
-         {'view_name': 'AMR antibiotics', 'id': 'phenotype-Antibiotic_abbreviation', 'label': ''Antibiotic Abbreviation', 'sortable': True, 'rank': 2, 'enable_by_default': True}]
+        configuration dictionaries.
     """
     columns_per_view_query = """
-        SELECT v.name as view_name, cd.fullname AS id, cd.label, cd.sortable, vc.rank, vc.enable_by_default
-        FROM view as v
-            JOIN view_column vc on v.view_id = vc.view_id
-            JOIN column_definition cd on vc.column_id = cd.column_id
+        SELECT
+            v.name AS view_name,
+            CONCAT(v.source, '-', vc.name) AS id,
+            vc.label,
+            vc.sortable,
+            vc.rank,
+            vc.enable_by_default,
+            vc.hidden
+        FROM view AS v
+            JOIN view_column vc ON v.view_id = vc.view_id
+        WHERE vc.hidden = false
         ORDER BY vc.rank
-     """
+    """
 
     columns_per_view = query_to_records(db, columns_per_view_query)
     columns_grouped_per_view = defaultdict(list)
@@ -110,13 +111,17 @@ def _build_columns_per_view(db):
 
 
 def _build_filter_views(db, rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Transform joined rows into the `filterViews` structure.
+    """Transform filter_config rows into the filterViews structure.
+
+    Uses view_filter_group rank for ordering instead of the old
+    categoryGroups/otherCategoryGroups split with is_primary flag.
 
     Args:
-        rows: Iterable of dict rows from the views/categories/filters join.
+        db: Database connection object.
+        rows: Iterable of dict rows from the filter_config view.
 
     Returns:
-        List[Dict[str, Any]]: List of view dictionaries ordered by view_id asc.
+        List of view dictionaries ordered by view_dbid.
     """
     # Build views keyed by view_id to avoid assuming contiguous IDs.
     views: dict[Any, dict[str, Any]] = OrderedDict()
@@ -124,27 +129,43 @@ def _build_filter_views(db, rows: Iterable[dict[str, Any]]) -> list[dict[str, An
     per_view_group_index: dict[Any, dict[tuple[str, bool], int]] = defaultdict(dict)
 
     for r in rows:
-        vid = r["view_id"]
+        vid = r["view_dbid"]
+        source = r["source"]
+
         if vid not in views:
             views[vid] = {
-                "id": r["view_id"],
+                "id": vid,
                 "name": r["view_name"],
-                "url_name": r["url_name"],
-                "categoryGroups": [],
-                "otherCategoryGroups": [],
+                "url_name": r["view_url_name"],
+                "filterGroups": [],
+                "columns": [],
             }
 
-        view = views[vid]
-        group = _ensure_group(
-            view=view,
-            group_name=r["category_name"],
-            is_primary=bool(r["category_group_is_primary"]),
-            group_index=per_view_group_index[vid],
-        )
+        group_id = r["group_id"]
+        groups = per_view_groups[vid]
 
-        # Append the filter id (avoid accidental duplicates)
-        if r["column_id"] not in group["categories"]:
-            group["categories"].append(r["column_id"])
+        if group_id not in groups:
+            groups[group_id] = {
+                "id": group_id,
+                "label": r["group_label"],
+                "rank": r["group_rank"],
+                "categories": [],
+            }
+
+        # Resolve actual column name for the prefixed id (frontend compatibility)
+        query_columns = r.get("query_columns")
+        if query_columns and isinstance(query_columns, str):
+            query_columns = json.loads(query_columns)
+        col_name = _resolve_column_name(r["filter_name"], query_columns)
+        prefixed_filter_id = f"{source}-{col_name}"
+        group = groups[group_id]
+        if prefixed_filter_id not in group["categories"]:
+            group["categories"].append(prefixed_filter_id)
+
+    # Attach sorted groups to views
+    for vid, groups in per_view_groups.items():
+        sorted_groups = sorted(groups.values(), key=lambda g: g["rank"])
+        views[vid]["filterGroups"] = sorted_groups
 
     # Add columns per view
     columns_per_view = _build_columns_per_view(db)
@@ -167,53 +188,63 @@ def _build_filter_views(db, rows: Iterable[dict[str, Any]]) -> list[dict[str, An
 
 
 def build_filters_config(db: duckdb.DuckDBPyConnection) -> dict[str, Any]:
-    """Build the complete filters configuration document.
+    """Build the complete filters configuration document from the new v2 schema.
 
-    This wraps three steps:
-      1) Build `filterCategories` from the `filter` and `category` tables.
-      2) Build `filterViews` from `view_categories` DuckDB view.
-      3) Finally we get the release info from release table and put it in `release`.
+    Uses the filter_config and column_config convenience views along with
+    view_filter_value for pre-computed filter options.
 
     Args:
         db: Database connection object.
 
     Returns:
-        Dict[str, Any]: A dictionary with keys:
-            - "filterCategories": {category_id: {...}}
-            - "filterViews": [ {...}, ... ]
-            - "release": {...}
+        Dict with keys: filterCategories, filterViews, release.
     """
-    # Categories
+    # Categories: join filter_config with view_filter_value for select_list values
     filters_category_query = """
-        SELECT f.label, f.value, d.name as dataset, cd.fullname as column_id
-        FROM filter f
-        JOIN column_definition cd ON f.column_id = cd.column_id
-        JOIN dataset_column dc ON cd.column_id = dc.column_id
-        JOIN dataset d ON dc.dataset_id = d.dataset_id
+        SELECT
+            fc.source,
+            fc.filter_name,
+            fc.filter_label,
+            fc.filter_type,
+            fc.match_type,
+            fc.min,
+            fc.max,
+            fc.query_columns,
+            fc.regex,
+            fc.view_filter_id,
+            fv.value AS filter_value,
+            fv.label AS value_label
+        FROM filter_config fc
+            LEFT JOIN view_filter_value fv ON fc.view_filter_id = fv.view_filter_id
+        ORDER BY fc.view_filter_id, fv.value
     """
     category_rows = query_to_records(db, filters_category_query)
     filter_categories = _build_filter_categories(category_rows)
 
-    # Views
+    # Views: use filter_config directly
     filters_view_query = """
-        SELECT view_id,
+        SELECT
+            view_dbid,
+            view_id,
+            view_url_name,
             view_name,
-            view_url_name as url_name,
-            category_group_id,
-            category_group_name,
-            category_group_is_primary,
-            category_name,
-            column_fullname as column_id,
-            column_name,
-        FROM view_categories
-        ORDER BY view_id, category_group_id;
+            source,
+            group_id,
+            group_label,
+            group_rank,
+            filter_rank,
+            filter_name,
+            filter_label,
+            filter_type,
+            query_columns
+        FROM filter_config
+        ORDER BY view_dbid, group_rank, filter_rank
     """
+    view_rows = query_to_records(db, filters_view_query)
+    filter_views = _build_filter_views(db, view_rows)
 
     # Release
     release_query = "SELECT release_label as label FROM release"
-
-    view_rows = query_to_records(db, filters_view_query)
-    filter_views = _build_filter_views(db, view_rows)
     release_rows = query_to_records(db, release_query)
     release = release_rows[0] if release_rows else None
 
