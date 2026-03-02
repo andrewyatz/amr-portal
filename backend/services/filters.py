@@ -37,6 +37,7 @@ class FilterQueryContext:
     dataset: str
     base_query: str
     count_query: str
+    params: list
     display_column_details: dict
     order_by_col: Optional[str]
 
@@ -234,7 +235,7 @@ def _build_where_clause(
     category: str,
     values: list[str],
     filter_meta: Dict[str, Dict[str, Any]],
-) -> Optional[str]:
+) -> Optional[tuple[str, list]]:
     """Build a type-appropriate WHERE clause fragment for a single filter.
 
     Args:
@@ -243,43 +244,48 @@ def _build_where_clause(
         filter_meta: Filter metadata dict keyed by prefixed filter id.
 
     Returns:
-        SQL WHERE clause fragment, or None if the filter cannot be applied.
+        Tuple of (SQL WHERE clause fragment with ? placeholders, list of bind params),
+        or None if the filter cannot be applied.
     """
     meta = filter_meta.get(category)
     if not meta:
-        # Fallback: treat as simple IN filter on the column name after prefix
         col = category.split("-", 1)[-1]
-        quoted_values = [f"'{v}'" for v in values]
-        return f"{quote_column_name(col)} IN ({', '.join(quoted_values)})"
+        placeholders = ", ".join("?" for _ in values)
+        return f"{quote_column_name(col)} IN ({placeholders})", list(values)
 
     filter_type = meta["filter_type"]
     col = _resolve_query_column(meta)
     match_type = meta.get("match_type", "exact")
 
     if filter_type in ("select_list", "select_in"):
-        quoted_values = [f"'{v}'" for v in values]
-        return f"{quote_column_name(col)} IN ({', '.join(quoted_values)})"
+        placeholders = ", ".join("?" for _ in values)
+        return f"{quote_column_name(col)} IN ({placeholders})", list(values)
 
     elif filter_type == "select":
         if match_type == "prefix":
-            clauses = [f"{quote_column_name(col)} LIKE '{v}%'" for v in values]
-            return f"({' OR '.join(clauses)})"
+            clauses = [f"{quote_column_name(col)} LIKE ?" for _ in values]
+            params = [f"{v}%" for v in values]
+            return f"({' OR '.join(clauses)})", params
         else:
             if len(values) == 1:
-                return f"{quote_column_name(col)} = '{values[0]}'"
-            quoted_values = [f"'{v}'" for v in values]
-            return f"{quote_column_name(col)} IN ({', '.join(quoted_values)})"
+                return f"{quote_column_name(col)} = ?", [values[0]]
+            placeholders = ", ".join("?" for _ in values)
+            return f"{quote_column_name(col)} IN ({placeholders})", list(values)
 
     elif filter_type == "range":
-        if len(values) >= 2:
-            return f"{quote_column_name(col)} BETWEEN {values[0]} AND {values[1]}"
-        elif len(values) == 1:
-            return f"{quote_column_name(col)} = {values[0]}"
+        try:
+            numeric_values = [float(v) for v in values]
+        except (ValueError, TypeError):
+            return None
+        if len(numeric_values) >= 2:
+            return f"{quote_column_name(col)} BETWEEN ? AND ?", [numeric_values[0], numeric_values[1]]
+        elif len(numeric_values) == 1:
+            return f"{quote_column_name(col)} = ?", [numeric_values[0]]
         return None
 
     elif filter_type == "list_contains":
-        clauses = [f"list_contains({quote_column_name(col)}, '{v}')" for v in values]
-        return f"({' OR '.join(clauses)})"
+        clauses = [f"list_contains({quote_column_name(col)}, ?)" for _ in values]
+        return f"({' OR '.join(clauses)})", list(values)
 
     elif filter_type == "location":
         qc = meta.get("query_columns", {})
@@ -301,24 +307,33 @@ def _build_where_clause(
         end_col = qc.get("end", "region_end")
 
         region = groups.get("region")
-        start = groups.get("start")
-        end = groups.get("end")
+        start_str = groups.get("start")
+        end_str = groups.get("end")
         strand = groups.get("strand")
 
-        clauses = [f"{quote_column_name(region_col)} = '{region}'"]
-        if start and end:
-            clauses.append(f"CAST({quote_column_name(start_col)} AS BIGINT) <= {end}")
-            clauses.append(f"CAST({quote_column_name(end_col)} AS BIGINT) >= {start}")
+        clauses = [f"{quote_column_name(region_col)} = ?"]
+        params: list = [region]
+
+        if start_str and end_str:
+            try:
+                start_val = int(start_str)
+                end_val = int(end_str)
+            except ValueError:
+                return None
+            clauses.append(f"{quote_column_name(start_col)} <= ?")
+            clauses.append(f"{quote_column_name(end_col)} >= ?")
+            params.extend([end_val, start_val])
 
         if strand and "strand" in qc:
             strand_col = qc["strand"]
-            clauses.append(f"{quote_column_name(strand_col)} = '{strand}'")
+            clauses.append(f"{quote_column_name(strand_col)} = ?")
+            params.append(strand)
 
-        return f"({' AND '.join(clauses)})"
+        return f"({' AND '.join(clauses)})", params
 
     # Unknown filter type - fallback to IN
-    quoted_values = [f"'{v}'" for v in values]
-    return f"{quote_column_name(col)} IN ({', '.join(quoted_values)})"
+    placeholders = ", ".join("?" for _ in values)
+    return f"{quote_column_name(col)} IN ({placeholders})", list(values)
 
 
 def _build_filter_query_context(payload: Payload, db: duckdb.DuckDBPyConnection) -> FilterQueryContext:
@@ -398,12 +413,15 @@ def _build_filter_query_context(payload: Payload, db: duckdb.DuckDBPyConnection)
         if order_by_col not in valid_columns:
             raise HTTPException(status_code=400, detail=f"Invalid order_by column: {order_by_col!r}")
 
-    # Build type-aware WHERE clauses
+    # Build type-aware WHERE clauses with bind parameters
     where_clauses = []
+    all_params = []
     for category, values in grouped_filters.items():
-        clause = _build_where_clause(category, values, filter_meta)
-        if clause:
+        result = _build_where_clause(category, values, filter_meta)
+        if result:
+            clause, params = result
             where_clauses.append(clause)
+            all_params.extend(params)
 
     where_sql = " AND ".join(where_clauses)
     base_query = f"SELECT {columns_to_display_str} FROM {selected_dataset}"
@@ -416,6 +434,7 @@ def _build_filter_query_context(payload: Payload, db: duckdb.DuckDBPyConnection)
         dataset=selected_dataset,
         base_query=base_query,
         count_query=count_query,
+        params=all_params,
         display_column_details=display_column_details,
         order_by_col=order_by_col,
     )
@@ -432,7 +451,7 @@ def _stream_prefixed_rows(
     try:
         conn.execute("PRAGMA threads = 4")
         conn.execute("PRAGMA memory_limit = '2GB'")
-        cursor = conn.execute(query)
+        cursor = conn.execute(query, context.params)
         raw_columns = [desc[0] for desc in cursor.description]
         prefixed_columns = [f"{context.dataset}-{col}" for col in raw_columns]
 
@@ -459,14 +478,14 @@ def filter_amr_records(payload: Payload, db: duckdb.DuckDBPyConnection):
         logger.info(f"selected_filters: {payload.selected_filters}")
         logger.info(f"count_query: {context.count_query}")
 
-        total_hits = db.execute(context.count_query).fetchone()[0]
+        total_hits = db.execute(context.count_query, context.params).fetchone()[0]
 
         offset = (page - 1) * per_page
         paginated_query = _append_order_clause(context.base_query, payload, context.order_by_col)
         paginated_query += f" LIMIT {per_page} OFFSET {offset}"
         logger.info(f"base_query: {paginated_query}")
 
-        res_df = db.execute(paginated_query).fetchdf()
+        res_df = db.execute(paginated_query, context.params).fetchdf()
         res_df = res_df.replace({np.nan: None, np.inf: None, -np.inf: None})
         res_df = res_df.add_prefix(f"{context.dataset}-")
         result = [serialize_amr_record(row, context.display_column_details) for _, row in res_df.iterrows()]
@@ -561,7 +580,7 @@ def fetch_filtered_records(payload: Payload, scope, file_format, db: duckdb.Duck
 
     # scope == "all" - true streaming without loading the full dataset
     context = _build_filter_query_context(payload, db)
-    total_hits = db.execute(context.count_query).fetchone()[0]
+    total_hits = db.execute(context.count_query, context.params).fetchone()[0]
     if total_hits == 0:
         raise HTTPException(status_code=404, detail="No data found for the given filters")
 

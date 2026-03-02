@@ -57,29 +57,29 @@ TESTING=true pytest backend/
 
 #### API Calls Examples
 
-##### `/filters-config`
+##### `/api/filters-config`
 ```
 curl -X 'GET' \
-  'http://localhost:8000/filters-config' \
+  'http://localhost:8000/api/filters-config' \
   -H 'accept: application/json'
 ```
 
-##### `/amr-records`
+##### `/api/amr-records`
 ###### Fetching _Phenotype_ data
 ```
 curl -X 'POST' \
-  'http://localhost:8000/amr-records' \
+  'http://localhost:8000/api/amr-records' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
   "selected_filters": [
     { "category": "phenotype-genus", "value": "Streptococcus" },
-    { "category": "phenotype-Antibiotic_abbreviation", "value": "OXA" },
-    { "category": "phenotype-Antibiotic_abbreviation", "value": "AMK" }
+    { "category": "phenotype-antibiotic_name", "value": "oxacillin" },
+    { "category": "phenotype-antibiotic_name", "value": "amikacin" }
   ],
   "view_id": 1,
   "order_by": {
-    "category": "phenotype-collection_date",
+    "category": "phenotype-collection_year",
     "order": "DESC"
   }
 }'
@@ -88,37 +88,37 @@ curl -X 'POST' \
 ###### Fetching _Genotype_ data
 ```
 curl -X 'POST' \
-  'http://localhost:8000/amr-records' \
+  'http://localhost:8000/api/amr-records' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
   "selected_filters": [
-    { "category": "genotype-Contig_id", "value": "CQKJ01000001.1" },
-    { "category": "genotype-Contig_id", "value": "DAFBZU010000245.1" }
+    { "category": "genotype-genus", "value": "Staphylococcus" },
+    { "category": "genotype-species", "value": "aureus" }
   ],
   "view_id": 2,
   "order_by": {
-    "category": "genotype-Contig_id",
+    "category": "genotype-genus",
     "order": "DESC"
   }
 }'
 ```
 
-##### `/download`
+##### `/api/amr-records/download`
 ###### Download data in the current page in `CSV` format
 ```
 curl -X 'POST' \
-  'http://localhost:8000/amr-records/download' \
+  'http://localhost:8000/api/amr-records/download' \
   -H 'Content-Type: application/json' \
   -d '{
   "selected_filters": [
     { "category": "phenotype-genus", "value": "Streptococcus" },
-    { "category": "phenotype-Antibiotic_abbreviation", "value": "OXA" },
-    { "category": "phenotype-Antibiotic_abbreviation", "value": "AMK" }
+    { "category": "phenotype-antibiotic_name", "value": "oxacillin" },
+    { "category": "phenotype-antibiotic_name", "value": "amikacin" }
   ],
   "view_id": 1,
   "order_by": {
-    "category": "phenotype-collection_date",
+    "category": "phenotype-collection_year",
     "order": "DESC"
   }
 }'
@@ -127,7 +127,7 @@ curl -X 'POST' \
 ###### Download all matches in `JSON` format
 ```
 curl -X 'POST' \
-  'http://localhost:8000/amr-records/download?scope=all&file_format=json' \
+  'http://localhost:8000/api/amr-records/download?scope=all&file_format=json' \
   -H 'Content-Type: application/json' \
   -d '{
   "selected_filters": [
@@ -135,7 +135,7 @@ curl -X 'POST' \
   ],
   "view_id": 1,
   "order_by": {
-    "category": "phenotype-collection_date",
+    "category": "phenotype-collection_year",
     "order": "DESC"
   }
 }'
