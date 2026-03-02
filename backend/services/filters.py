@@ -484,6 +484,7 @@ def filter_amr_records(payload: Payload, db: duckdb.DuckDBPyConnection):
         paginated_query = _append_order_clause(context.base_query, payload, context.order_by_col)
         paginated_query += f" LIMIT {per_page} OFFSET {offset}"
         logger.info(f"base_query: {paginated_query}")
+        logger.info(f"parameters: {context.params}")
 
         res_df = db.execute(paginated_query, context.params).fetchdf()
         res_df = res_df.replace({np.nan: None, np.inf: None, -np.inf: None})
