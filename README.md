@@ -166,3 +166,14 @@ This will create a `dist` directory containing a static html file and all the as
 ## Further details
 
 The frontend combines a static site built with [Eleventy](https://www.11ty.dev/) with islands of interactivity built with web components and Lit. For more details about the build setup, see `frontend/eleventy.config.js`, and the documentation in the [`docs/decisions`](/docs//decisions/) directory.
+
+## Data connect
+
+This API can support the GA4GH Data Connect product. See [DATACONNECT.md](backend/DATACONNECT.md) for details. To enable Data Connect add the environment variable.
+
+```bash
+export ENABLE_DATACONNECT=1
+uvicorn backend.main:app --reload
+```
+
+Data Connect will be available under the `/dataconnect` URL prefix.

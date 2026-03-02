@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     Requires DUCKDB_PATH to point to an existing DuckDB file.
     """
     duckdb_path: Path = Field(validation_alias="DUCKDB_PATH", description="Path to the DuckDB database file")
+    enable_dataconnect: bool = Field(default=False, validation_alias="ENABLE_DATACONNECT", description="Enable GA4GH Data Connect API endpoints")
 
     model_config = SettingsConfigDict(
         # load from .env if present, or .env.test when running pytest
